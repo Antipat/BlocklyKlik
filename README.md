@@ -10,7 +10,7 @@
 # [Linux Debian 64 bit](https://drive.google.com/file/d/1h4Jpe2KMlRzJR2LbmZcA8e3vleMd6cTx/view?usp=sharing)
 # [Linux Red OS 64 bit](https://drive.google.com/file/d/1s_yVA87ClNtz6kL2Q2ShZPq_OrMWovxA/view) (старая сборка)
 
-Так же доступен для всех желающих исходный код редактора: Исходный [код BlocklyKlik](https://drive.google.com/file/d/1WHxbJS_TPuiHRmdFyZ5VFkxtXGg09OVd/view) 
+Так же доступен для всех желающих исходный код редактора, см. репозиторий: BlocklyKlik2_Visual.py, BloklyEngine2.py, Test_Editor.py 
 
 Для полноценной работы с исходным кодом вам понадобится установить python 3.11 или выше и библиотеки pyserial и pygame-ce
 
