@@ -27,7 +27,7 @@ SCREEN_HEIGHT = monitor_info.current_h - 60  # Вычитаем 60 пиксел�
 
 # Создаем изменяемое окно, которое сразу открывается во весь экран
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("BLOCKLY/KLIK 2.0")
+pygame.display.set_caption("BLOCKLY/KLIK 2.1")
 font = pygame.font.SysFont("Arial", 16)
 clock = pygame.time.Clock()
 # Включаем автоповтор клавиш для удобного стирания текста через Backspace
@@ -129,7 +129,16 @@ COLOR_BTN_DISC = (192, 41, 43)    # Красная кнопка «Отключи
 # Объявляем цвет для новой категории "Функции" (Красивый фиолетовый/аметистовый)
 COLOR_CAT_FUNC = (155, 89, 182)
 
+# для дисплея HT16K33
+COLOR_CAT_DISPLAY = (41, 128, 185) # Красивый синий цвет для категории дисплея
+
 PANEL_WIDTH = 320
+
+# Переменные для графического редактора матрицы HT16K33
+matrix_target_block = None  # Ссылка на блок, который мы сейчас редактируем
+# Создаем сетку 8 строк на 16 колонок (0 - выкл, 1 - вкл)
+matrix_grid = [[0 for _ in range(16)] for _ in range(8)]
+
 
 # Инициализация звукового движка
 if not pygame.mixer.get_init():
@@ -297,6 +306,53 @@ class Block:
             if "string_concat" not in BLOCKS_WITH_TWO_INPUTS:
                 BLOCKS_WITH_TWO_INPUTS.append("string_concat")
 
+        elif "i2c_scanner" in block_type:
+            self.input_value = str("")  # Блоку сканера не нужны инпуты
+            default_val = ""            # Сбрасываем правый инпут
+
+
+        # --- БЛОКИ ДЛЯ ДИСПЛЕЯ HT16K33 ---
+        elif "ht_display_init" in block_type:
+            self.input_value = str("0x70")      # Адрес по умолчанию
+            # Авто-регистрация блока с одним инпутом (если у вас есть такой список, иначе в двух)
+            if "ht_display_init" not in BLOCKS_WITH_TWO_INPUTS:
+                BLOCKS_WITH_TWO_INPUTS.append("ht_display_init")
+
+##        elif "ht_display_row" in block_type:
+##            self.input_value = str("0")         # Номер строки (0-7)
+##            default_val = "0B00111100"          # Битовая маска во второй инпут по умолчанию
+##            if "ht_display_row" not in BLOCKS_WITH_TWO_INPUTS:
+##                BLOCKS_WITH_TWO_INPUTS.append("ht_display_row")
+
+        # --- БЛОК ПЕРЕЗАГРУЗКИ ДИСПЛЕЯ HT16K33 ---
+        elif "ht_display_row" in block_type:
+            # Переименовывать внутренний block_type не обязательно, чтобы не ломать логику списков,
+            # но мы меняем его суть. Ему нужен только 1 инпут — адрес.
+            self.input_value = str("0x70")      # Адрес дисплея по умолчанию
+            # Удаляем или не добавляем его в BLOCKS_WITH_TWO_INPUTS!
+            if "ht_display_row" in BLOCKS_WITH_TWO_INPUTS:
+                BLOCKS_WITH_TWO_INPUTS.remove("ht_display_row")
+
+
+        elif "ht_display_update" in block_type:
+            self.input_value = str("0x70")      # Адрес матрицы (первый инпут)
+            # Второй инпут временно хранит задержку
+            if "ht_display_update" not in BLOCKS_WITH_TWO_INPUTS:
+                BLOCKS_WITH_TWO_INPUTS.append("ht_display_update")
+
+            # --- ВАЖНО: блок теперь хранит персональную сетку 8x16 ---
+            self.matrix_data = [[0 for _ in range(16)] for _ in range(8)]
+
+        elif "cpp_comment" in block_type:
+            # Записываем дефолтный текст в первый (левый) инпут
+            self.input_value = str(default_val) if default_val else str("Мой комментарий")
+
+            # Убеждаемся, что Pygame НЕ считает его блоком с двумя инпутами
+            if "cpp_comment" in BLOCKS_WITH_TWO_INPUTS:
+                BLOCKS_WITH_TWO_INPUTS.remove("cpp_comment")
+
+
+
 
         else:
             self.input_value = str("myServo")
@@ -352,8 +408,34 @@ class Block:
 ##                self.shape_type = "bracket"
             elif "loop" in self.block_type or "core_" in self.block_type:
                 self.shape_type = "hat"
+
+            # --- ИСПРАВЛЕНО: Теперь сканер гарантированно получает форму command ---
+            elif "i2c_scanner" in self.block_type:
+                self.shape_type = "command"
+
+            elif "ht_display_init" in self.block_type:
+                text_label = "Дисплей HT16K33: Инит на Адрес:"
+                self.shape_type = "command"
+##            elif "ht_display_row" in self.block_type:
+##                text_label = "Дисплей: Записать Строку:"
+##                self.shape_type = "command"
+
+            elif "ht_display_row" in self.block_type:
+                text_label = "Дисплей: СБРОС / Перезагрузка Адрес:"
+                self.shape_type = "command"
+
+            elif "ht_display_update" in self.block_type:
+                text_label = "Дисплей: Обновить Адрес:"
+                self.shape_type = "command"
+
+            elif "cpp_comment" in self.block_type:
+                text_label = "// "
+                self.shape_type = "command"
+
+
             else:
                 self.shape_type = "command"
+
             # "setup" in self.block_type or
 
         # Вычисляем визуальную координату Y с учетом прокрутки холста
@@ -1203,6 +1285,196 @@ class Block:
             )
             return {"global": "", "setup": "", "loop": tcs_code}
 
+        elif self.block_type == "i2c_scanner":
+            # 1. Глобальная область (авто-подключение библиотеки Wire)
+            global_code = "#include <Wire.h>\n"
+
+            # 2. Область инициализации setup
+            setup_code = (
+                "  Wire.begin();\n"
+                "  if (!Serial) Serial.begin(9600);\n" # Безопасная инициализация, если Serial еще не запущен
+            )
+
+            # 3. Область основного цикла loop (Алгоритм сканирования)
+            loop_code = (
+                "  byte error, address;\n"
+                "  int nDevices = 0;\n"
+                "  Serial.println(\"Scanning I2C...\");\n"
+                "  for(address = 8; address < 127; address++) {\n"
+                "    Wire.beginTransmission(address);\n"
+                "    error = Wire.endTransmission();\n"
+                "    if (error == 0) {\n"
+                "      Serial.print(\"I2C device found at 0x\");\n"
+                "      if (address < 16) Serial.print(\"0\");\n"
+                "      Serial.print(address, HEX);\n"
+                "      Serial.println(\" !\");\n"
+                "      nDevices++;\n"
+                "    } else if (error == 4) {\n"
+                "      Serial.print(\"Unknown error at 0x\");\n"
+                "      if (address < 16) Serial.print(\"0\");\n"
+                "      Serial.println(address, HEX);\n"
+                "    }\n"
+                "  }\n"
+                "  if (nDevices == 0) {\n"
+                "    Serial.println(\"No I2C devices found\\n\");\n"
+                "  } else {\n"
+                "    Serial.println(\"Scan done\\n\");\n"
+                "  }\n"
+                "  delay(5000); // Задержка между сканированиями\n"
+            )
+
+            return {"global": global_code, "setup": setup_code, "loop": loop_code}
+
+        # --- БЛОКИ ДИСПЛЕЯ HT16K33 ---
+        elif self.block_type == "ht_display_init":
+            # Выносим всю базу программного I2C и управления матрицей в глобальную область
+            global_code = (
+                "const int sda_pin = A4;\n"
+                "const int scl_pin = A5;\n"
+                "uint16_t displaybuffer[8];\n\n"
+                "void i2c_start() {\n"
+                "  digitalWrite(sda_pin, HIGH); digitalWrite(scl_pin, HIGH); delayMicroseconds(5);\n"
+                "  digitalWrite(sda_pin, LOW); delayMicroseconds(5); digitalWrite(scl_pin, LOW);\n"
+                "}\n\n"
+                "void i2c_stop() {\n"
+                "  digitalWrite(sda_pin, LOW); digitalWrite(scl_pin, HIGH); delayMicroseconds(5);\n"
+                "  digitalWrite(sda_pin, HIGH); delayMicroseconds(5);\n"
+                "}\n\n"
+                "void i2c_write(uint8_t data) {\n"
+                "  for (uint8_t i = 0; i < 8; i++) {\n"
+                "    digitalWrite(sda_pin, (data & 0x80) ? HIGH : LOW); data <<= 1; delayMicroseconds(5);\n"
+                "    digitalWrite(scl_pin, HIGH); delayMicroseconds(5); digitalWrite(scl_pin, LOW);\n"
+                "  }\n"
+                "  digitalWrite(sda_pin, HIGH); delayMicroseconds(5); digitalWrite(scl_pin, HIGH);\n"
+                "  delayMicroseconds(5); digitalWrite(scl_pin, LOW);\n"
+                "}\n\n"
+                "void matrix_begin(uint8_t addr) {\n"
+                "  pinMode(sda_pin, OUTPUT); pinMode(scl_pin, OUTPUT);\n"
+                "  i2c_start(); i2c_write(addr << 1); i2c_write(0x21); i2c_stop(); delay(10);\n"
+                "  i2c_start(); i2c_write(addr << 1); i2c_write(0x81); i2c_stop(); delay(10);\n"
+                "  i2c_start(); i2c_write(addr << 1); i2c_write(0xE5); i2c_stop();\n"
+                "}\n\n"
+                "void matrix_clear() {\n"
+                "  for (uint8_t i = 0; i < 8; i++) displaybuffer[i] = 0;\n"
+                "}\n\n"
+                "void matrix_writeDisplay(uint8_t addr) {\n"
+                "  i2c_start(); i2c_write(addr << 1); i2c_write(0x00);\n"
+                "  for (uint8_t i = 0; i < 8; i++) {\n"
+                "    uint16_t data = displaybuffer[i];\n"
+                "    i2c_write(data & 0xFF);\n"
+                "    i2c_write((data >> 8) & 0xFF);\n"
+                "  }\n"
+                "  i2c_stop();\n"
+                "}\n"
+            )
+            # В setup инициализируем матрицу на указанном адресе и чистим её
+            setup_code = f"  matrix_begin({var_or_pin});\n  matrix_clear();\n"
+            return {"global": global_code, "setup": setup_code, "loop": ""}
+
+##        elif self.block_type == "ht_display_row":
+##            # var_or_pin — номер строки (0-7), val — битовая маска (например, 0B00111100)
+##            loop_code = f"  displaybuffer[{var_or_pin}] = {val};\n"
+##            return {"global": "", "setup": "", "loop": loop_code}
+
+        elif self.block_type == "ht_display_row":
+            # var_or_pin — адрес матрицы (например, 0x70)
+            loop_code = (
+                f"  // --- Имитация сброса I2C-автомата чипа через линию SDA (A4) ---\n"
+                f"  pinMode(A4, OUTPUT);\n"
+                f"  digitalWrite(A4, LOW);   // Притягиваем SDA к земле (короткое замыкание шины)\n"
+                f"  delay(200);\n"
+                f"  digitalWrite(A4, HIGH);  // Отпускаем линию в HIGH\n"
+                f"  delay(50);\n"
+                f"  pinMode(A4, INPUT);      // ВАЖНО: Переводим в INPUT, чтобы освободить шину для I2C\n\n"
+                f"  // --- Повторная программная инициализация HT16K33 ---\n"
+                f"  matrix_begin({var_or_pin});\n"
+                f"  matrix_clear();\n"
+            )
+            return {"global": "", "setup": "", "loop": loop_code}
+
+
+
+
+
+
+
+##        elif self.block_type == "ht_display_update":
+##            # var_or_pin — адрес дисплея (0x70), val — время задержки (1000)
+##
+##            # 1. Защита: проверяем наличие сохраненной матрицы в блоке
+##            grid_to_compile = self.matrix_data if hasattr(self, "matrix_data") else [[0 for _ in range(16)] for _ in range(8)]
+##
+##            # 2. Формируем строки с жесткими отступами в 2 пробела, чтобы компилятор их не сломал
+##            loop_code = "// --- Генерация графического рисунка матрицы ---\n"
+##
+##            for r in range(8):
+##                binary_str = "".join(str(grid_to_compile[r][c]) for c in range(16))
+##                loop_code += f"  displaybuffer[{r}] = 0B{binary_str};\n"
+##
+##            # Добавляем команду отправки буфера на дисплей
+##            loop_code += f"  matrix_writeDisplay({var_or_pin});"
+##
+##            # Если указана задержка, добавляем delay
+##            if val and val.strip() != "0":
+##                loop_code += f"\n  delay({val.strip()});"
+##
+##            return {"global": "", "setup": "", "loop": loop_code}
+
+        elif self.block_type == "ht_display_update":
+            # var_or_pin — адрес дисплея (0x70), val — время задержки (1000)
+
+            # 1. Защита: проверяем наличие сохраненной матрицы в блоке
+            grid_to_compile = self.matrix_data if hasattr(self, "matrix_data") else [[0 for _ in range(16)] for _ in range(8)]
+
+            # 2. Создаем временный пустой буфер для 8 строк Arduino
+            compiled_buffer = [0] * 8
+
+            # 3. МАТЕМАТИЧЕСКИЙ ПЕРЕВОРОТ И СБОРКА БИТОВ (Для правильной адресации HT16K33)
+            # Обходим каждую ячейку нашей сетки Pygame
+            for r in range(8):
+                for c in range(16):
+                    if grid_to_compile[r][c] == 1:
+                        if c < 8:
+                            # --- ПЕРВЫЙ ДИСПЛЕЙ (Левый, младший байт) ---
+                            # Поворачиваем: строка r становится битом, колонка c становится индексом строки буфера
+                            compiled_buffer[c] |= (1 << r)
+                        else:
+                            # --- ВТОРОЙ ДИСПЛЕЙ (Правый, старший байт) ---
+                            # Сдвигаем индекс колонки для второго экрана (c - 8)
+                            # Записываем в старший байт (+8 бит сдвига)
+                            compiled_buffer[c - 8] |= (1 << (r + 8))
+
+            # 4. ФОРМИРУЕМ ИТОГОВЫЙ ТЕКСТ КОДА C++
+            loop_code = "// --- Генерация графического рисунка матрицы (С коррекцией осей) ---\n"
+            for r in range(8):
+                # Превращаем получившиеся 16-битные числа в красивые бинарные строки для Arduino IDE
+                binary_str = format(compiled_buffer[r], '016b')
+                loop_code += f"  displaybuffer[{r}] = 0B{binary_str};\n"
+
+            # Добавляем команду отправки буфера на дисплей
+            loop_code += f"  matrix_writeDisplay({var_or_pin});"
+
+            # Если указана задержка, добавляем delay
+            if val and val.strip() != "0":
+                loop_code += f"\n  delay({val.strip()});"
+
+            return {"global": "", "setup": "", "loop": loop_code}
+
+
+        elif self.block_type == "cpp_comment":
+            # var_or_pin содержит текст, который пользователь написал в левом инпуте
+            comment_text = var_or_pin.strip()
+
+            # Формируем стандартную строчку комментария для Arduino IDE
+            loop_code = f"// {comment_text}"
+
+            return {"global": "", "setup": "", "loop": loop_code}
+
+
+
+
+
+
         # Заглушка для неизвестных блоков
         return {"global": "", "setup": "", "loop": ""}
 
@@ -1473,9 +1745,24 @@ add_toolbox_item("Датчик цвета: Считать (Цвет|Var)", "tcs_
 # Добавляем в бирюзовую категорию палитры
 add_toolbox_item("Bluetooth: Считать в Var", "bluetooth_read", "x", COLOR_CAT_IR)
 
+# Блок сканирования устройства
+add_toolbox_item("Сканировать шину I2C", "i2c_scanner", "", COLOR_CAT_PINS)
+
+# Добавляем элементы в меню тулбокса
+add_toolbox_item("Дисплей: Инициализация", "ht_display_init", "0x70", COLOR_CAT_DISPLAY)
+add_toolbox_item("Дисплей: Сброс ", "ht_display_row", "0", COLOR_CAT_DISPLAY)
+add_toolbox_item("Дисплей: Обновить (мс)", "ht_display_update", "1000", COLOR_CAT_DISPLAY)
+
+
 # --- ДОБАВЛЕНИЕ КАТЕГОРИИ ФУНКЦИЙ В КОНЕЦ ПАЛИТРЫ ---
 add_toolbox_item("Создать функцию:", "func_definition", "", COLOR_CAT_FUNC)
 add_toolbox_item("Вызвать функцию:", "func_call", "", COLOR_CAT_FUNC)
+
+
+COLOR_CAT_COMMENT_BLOCK = (120, 125, 130) # Серый цвет для блока комментариев
+
+# Добавляем элемент в меню тулбокса (третьим параметром передаем дефолтный текст комментария)
+add_toolbox_item("Комментарий //", "cpp_comment", "Напишите здесь что-то...", COLOR_CAT_COMMENT_BLOCK)
 
 
 # --- ПЕРЕМЕННЫЕ МОНИТОРА ПОРТА ---
@@ -1705,6 +1992,112 @@ def load_project_from_json(filename="pygame_project.json"):
         print(f"Ошибка загрузки проекта: {e}")
 
 
+def draw_matrix_editor(surface):
+    # Затемняем задний фон холста
+    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((30, 30, 30, 220))
+    surface.blit(overlay, (0, 0))
+
+    # Размеры центрального окна
+    win_w, win_h = 700, 480
+    win_x = (SCREEN_WIDTH - win_w) // 2
+    win_y = (SCREEN_HEIGHT - win_h) // 2
+
+    # Рисуем подложку окна
+    pygame.draw.rect(surface, (45, 52, 54), (win_x, win_y, win_w, win_h), border_radius=12)
+    pygame.draw.rect(surface, (9, 132, 227), (win_x, win_y, win_w, win_h), width=3, border_radius=12)
+
+    # Заголовок окна
+    title_surf = font.render("Графический редактор матрицы 8x16", True, (255, 255, 255))
+    surface.blit(title_surf, (win_x + 20, win_y + 20))
+
+    # Рисуем сетку 8 строк на 16 столбцов
+    cell_size = 32
+    start_x = win_x + (win_w - (16 * cell_size)) // 2
+    start_y = win_y + 70
+
+    for r in range(8):
+        for c in range(16):
+            cell_rect = pygame.Rect(start_x + c * cell_size, start_y + r * cell_size, cell_size - 2, cell_size - 2)
+            # Если пиксель горит (1) — красим в красный, иначе в темно-серый
+            color = (255, 76, 76) if matrix_grid[r][c] == 1 else (65, 72, 74)
+            pygame.draw.rect(surface, color, cell_rect, border_radius=4)
+            pygame.draw.rect(surface, (100, 110, 114), cell_rect, width=1, border_radius=4)
+
+            # Номера строк слева
+            if c == 0:
+                lbl = font.render(str(r), True, (178, 190, 195))
+                surface.blit(lbl, (start_x - 20, start_y + r * cell_size + 6))
+
+    # Кнопка "Готово"
+    btn_rect = pygame.Rect(win_x + (win_w - 180) // 2, win_y + win_h - 60, 180, 40)
+    pygame.draw.rect(surface, (46, 204, 113), btn_rect, border_radius=6)
+    btn_text = font.render("Готово (Enter)", True, (255, 255, 255))
+    surface.blit(btn_text, (btn_rect.x + (btn_rect.width - btn_text.get_width()) // 2, btn_rect.y + 10))
+
+    return btn_rect, start_x, start_y, cell_size
+
+##def save_matrix_data():
+##    global app_state, matrix_target_block
+##    if not matrix_target_block:
+##        app_state = "workspace"
+##        return
+##
+##    # Проверяем, что мы настраиваем блок конкретной строки дисплея
+##    if "ht_display_row" in matrix_target_block.block_type:
+##        try:
+##            # Извлекаем номер строки из первого (левого) инпута блока
+##            row_idx = int(matrix_target_block.input_value)
+##            if 0 <= row_idx <= 7:
+##                # Собираем 16 бит для этой строки из нашей графической сетки matrix_grid
+##                binary_str = "0B" + "".join(str(matrix_grid[row_idx][c]) for c in range(16))
+##
+##                # Записываем готовый двоичный код во второй (правый) инпут блока!
+##                matrix_target_block.input_value2 = binary_str
+##
+##                # Синхронизируем курсор под длину новой строки
+##                if hasattr(matrix_target_block, "cursor_index2"):
+##                    matrix_target_block.cursor_index2 = len(binary_str)
+##        except ValueError:
+##            pass # Если в поле номера строки пользователь случайно ввёл не число
+##
+##    # Если мы кликнули ПКМ по любому другому блоку (для теста) — просто закроем окно
+##    if click_sound:
+##        click_sound.play()
+##
+##    app_state = "workspace"
+##    matrix_target_block = None
+
+def save_matrix_data():
+    global app_state, matrix_target_block, matrix_grid
+    if not matrix_target_block:
+        app_state = "workspace"
+        return
+
+    # Сохраняем полную матрицу внутрь блока (теперь это делают оба блока дисплея)
+    if "ht_display" in matrix_target_block.block_type:
+        import copy
+        matrix_target_block.matrix_data = copy.deepcopy(matrix_grid)
+
+        # Если это блок конкретной строки, мы ДОПОЛНИТЕЛЬНО обновляем его правый текстовый инпут
+        if "ht_display_row" in matrix_target_block.block_type:
+            try:
+                row_idx = int(matrix_target_block.input_value)
+                if 0 <= row_idx <= 7:
+                    binary_str = "0B" + "".join(str(matrix_grid[row_idx][c]) for c in range(16))
+                    matrix_target_block.input_value2 = binary_str
+                    if hasattr(matrix_target_block, "cursor_index2"):
+                        matrix_target_block.cursor_index2 = len(binary_str)
+            except ValueError:
+                pass
+
+    if click_sound: click_sound.play()
+    app_state = "workspace"
+    matrix_target_block = None
+
+
+
+
 # --- ИГРОВОЙ ЦИКЛ ПРОГРАММЫ ---
 running = True
 toolbox_scroll_y = 0
@@ -1770,6 +2163,8 @@ while running:
                             save_filename_text += event.unicode
             continue # Блокируем проход события к холсту!
 
+
+
         elif app_state == "open_dialog":
             win_cx = SCREEN_WIDTH // 2
             win_cy = SCREEN_HEIGHT // 2
@@ -1809,6 +2204,52 @@ while running:
                 app_state = "workspace"
             continue # Блокируем проход события к холсту!
 
+        if app_state == "matrix_editor":
+            # 1. Рассчитываем точные координаты элементов окна (копия логики из draw)
+            win_w, win_h = 700, 480
+            win_x = (SCREEN_WIDTH - win_w) // 2
+            win_y = (SCREEN_HEIGHT - win_h) // 2
+
+            cell_size = 32
+            start_x = win_x + (win_w - (16 * cell_size)) // 2
+            start_y = win_y + 70
+
+            # Хитбокс кнопки "Готово"
+            btn_rect = pygame.Rect(win_x + (win_w - 180) // 2, win_y + win_h - 60, 180, 40)
+
+            # --- ОБРАБОТКА КЛИКОВ МЫШИ ВНУТРИ ОКНА ---
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1: # ЛКМ по окну
+                mx, my = event.pos
+
+                # Проверяем клик по кнопке "Готово"
+                if btn_rect.collidepoint((mx, my)):
+                    save_matrix_data()
+                    continue
+
+                # Проверяем клик по пикселям сетки 8x16
+                for r in range(8):
+                    for c in range(16):
+                        cx = start_x + c * cell_size
+                        cy = start_y + r * cell_size
+                        cell_rect = pygame.Rect(cx, cy, cell_size - 2, cell_size - 2)
+
+                        if cell_rect.collidepoint((mx, my)):
+                            if click_sound:
+                                click_sound.play()
+                            matrix_grid[r][c] = 1 - matrix_grid[r][c] # Переключаем 0 <-> 1
+                            break
+
+            # --- ОБРАБОТКА КЛАВИАТУРЫ ВНУТРИ ОКНА ---
+            elif event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    save_matrix_data()
+                elif event.key == pygame.K_ESCAPE:
+                    if click_sound:
+                        click_sound.play()
+                    app_state = "workspace" # Закрываем без сохранения
+                    matrix_target_block = None
+
+            continue # ВАЖНО: Не пускаем события воркспейса наружу, пока открыто окно!
 
         # --- ОБРАБОТКА КЛАВИАТУРЫ ---
         elif event.type == pygame.KEYDOWN:
@@ -2163,6 +2604,77 @@ while running:
                         elif event.button == 5: workspace_scroll_y += 25
                 continue
 
+            # -------------------------------------------------------------------------
+            # 👇 НОВАЯ ОБРАБОТКА НАЖАТИЯ ПРАВОЙ КНОПКИ МЫШИ (Кнопка 3) 👇
+            # -------------------------------------------------------------------------
+##            if event.button == 3:
+##                # Проверяем клик ПКМ по блокам на холсте (в обратном порядке Z-order)
+##                for block in reversed(blocks):
+##                    # Вычисляем экранные координаты блока с учетом скролла холста
+##                    render_y_block = block.y - workspace_scroll_y
+##                    block_rect = pygame.Rect(block.x, render_y_block, block.width, block.height)
+##
+##                    # Если кликнули ПКМ именно по телу блока дисплея
+##                    if block_rect.collidepoint(event.pos) and "ht_display" in block.block_type:
+##                        if click_sound:
+##                            click_sound.play()
+##
+##                        # Переключаем состояние и запоминаем целевой блок
+##                        app_state = "matrix_editor"
+##                        matrix_target_block = block
+##
+##                        # Инициализируем пустую сетку
+##                        matrix_grid = [[0 for _ in range(16)] for _ in range(8)]
+##
+##                        # Если это блок строки и в нём уже есть бинарная маска "0B..." — загружаем её в сетку!
+##                        if "ht_display_row" in block.block_type and block.input_value2.startswith("0B"):
+##                            val_str = block.input_value2[2:] # Отрезаем префикс "0B"
+##                            try:
+##                                row_idx = int(block.input_value) # Получаем номер строки из левого инпута
+##                                if 0 <= row_idx <= 7 and len(val_str) == 16:
+##                                    for c in range(16):
+##                                        matrix_grid[row_idx][c] = int(val_str[c])
+##                            except ValueError:
+##                                pass # Игнорируем, если в инпуте строки написаны некорректные данные
+##
+##                        break # Поймали нужный блок, выходим из цикла поиска
+##                continue # Завершаем обработку текущего события event, не пуская его ниже к ЛКМ
+##            # -------------------------------------------------------------------------
+##            # 👆 КОНЕЦ ОБРАБОТКИ ПРАВОЙ КНОПКИ МЫШИ 👆
+##            # -------------------------------------------------------------------------
+
+            if event.button == 3:
+                for block in reversed(blocks):
+                    render_y_block = block.y - workspace_scroll_y
+                    block_rect = pygame.Rect(block.x, render_y_block, block.width, block.height)
+
+                    if block_rect.collidepoint(event.pos):
+                        # Проверяем, относится ли блок к дисплею (любому: строке или обновлению)
+                        if "ht_display" in block.block_type:
+                            if click_sound: click_sound.play()
+                            app_state = "matrix_editor"
+                            matrix_target_block = block
+
+                            # ЗАЩИТА: Если у блока по какой-то причине нет свойства matrix_data, создаем его на лету
+                            if not hasattr(block, "matrix_data"):
+                                block.matrix_data = [[0 for _ in range(16)] for _ in range(8)]
+
+                                # Если это старый блок строки и в нем БЫЛ текст 0B..., перенесем его в массив, чтобы не стереть
+                                if "ht_display_row" in block.block_type and block.input_value2.startswith("0B"):
+                                    val_str = block.input_value2[2:]
+                                    try:
+                                        row_idx = int(block.input_value)
+                                        if 0 <= row_idx <= 7 and len(val_str) == 16:
+                                            for c in range(16):
+                                                block.matrix_data[row_idx][c] = int(val_str[c])
+                                    except ValueError:
+                                        pass
+
+                            # Копируем матрицу блока в глобальную сетку окна редактора
+                            import copy
+                            matrix_grid = copy.deepcopy(block.matrix_data)
+                            break # Нашли блок, выходим из цикла
+                continue # Пропускаем ЛКМ ниже
 
             # --- НАЖАТИЕ ЛЕВОЙ КНОПКИ МЫШИ (Кнопка 1) ---
             if event.button == 1:
@@ -2786,6 +3298,9 @@ while running:
             cancel_text = font.render("Отмена", True, (255, 255, 255))
             screen.blit(cancel_text, (win_cx + 40 + (120 - cancel_text.get_width())//2, win_cy + 88))
 
+     # === В САМЫЙ КОНЕЦ ГЛАВНОГО ЦИКЛА (ПЕРЕД PYGAME.DISPLAY.FLIP()) ===
+    if app_state == "matrix_editor":
+        draw_matrix_editor(screen)
 
     pygame.display.flip()
     clock.tick(60)
