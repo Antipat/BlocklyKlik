@@ -6,7 +6,7 @@
 Его задача - это упростить процесс написания программ и помочь учителям и ученикам освоить текстовый язык программирования.
 
 Сейчас доступны сборки под:
-# [Windows](https://drive.google.com/file/d/1D_XHzm7fiLAILYhhsmqtDtAPa543ZV-X/view?usp=drive_link) 
+# [Windows](https://drive.google.com/file/d/1lr3Im4tx_ayapyEh6G6a5_uJfwAASHVU/view?usp=drive_link) 
 # [Linux Debian 64 bit](https://drive.google.com/file/d/1h4Jpe2KMlRzJR2LbmZcA8e3vleMd6cTx/view?usp=sharing)
 # [Linux Red OS 64 bit](https://drive.google.com/file/d/1s_yVA87ClNtz6kL2Q2ShZPq_OrMWovxA/view) (старая сборка)
 
