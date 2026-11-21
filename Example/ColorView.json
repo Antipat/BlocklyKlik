@@ -1,0 +1,274 @@
+[
+    {
+        "id": 0,
+        "name": "НАСТРОЙКА setup()",
+        "x": 400,
+        "y": 50,
+        "block_type": "core_setup",
+        "input_value": "myServo",
+        "input_value2": "0",
+        "color": [
+            44,
+            62,
+            80
+        ],
+        "parent_id": null,
+        "child_id": 10
+    },
+    {
+        "id": 1,
+        "name": "ГЛАВНЫЙ ЦИКЛ loop()",
+        "x": 842,
+        "y": 50,
+        "block_type": "core_loop",
+        "input_value": "myServo",
+        "input_value2": "0",
+        "color": [
+            44,
+            62,
+            80
+        ],
+        "parent_id": null,
+        "child_id": 15
+    },
+    {
+        "id": 2,
+        "name": "Датчик цвета: Считать (Цвет|Var)",
+        "x": 842,
+        "y": 206,
+        "block_type": "tcs_read",
+        "input_value": "B",
+        "input_value2": "b",
+        "color": [
+            22,
+            160,
+            133
+        ],
+        "parent_id": 16,
+        "child_id": 4
+    },
+    {
+        "id": 3,
+        "name": "Serial: Печать ЛН (println)",
+        "x": 842,
+        "y": 310,
+        "block_type": "serial_println",
+        "input_value": "r",
+        "input_value2": "Hello",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 4,
+        "child_id": 6
+    },
+    {
+        "id": 4,
+        "name": "Serial: Печать (print)",
+        "x": 842,
+        "y": 258,
+        "block_type": "serial_print",
+        "input_value": "R =",
+        "input_value2": "Hello",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 2,
+        "child_id": 3
+    },
+    {
+        "id": 5,
+        "name": "Serial: Печать ЛН (println)",
+        "x": 842,
+        "y": 414,
+        "block_type": "serial_println",
+        "input_value": "g",
+        "input_value2": "Hello",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 6,
+        "child_id": 8
+    },
+    {
+        "id": 6,
+        "name": "Serial: Печать (print)",
+        "x": 842,
+        "y": 362,
+        "block_type": "serial_print",
+        "input_value": "G = ",
+        "input_value2": "Hello",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 3,
+        "child_id": 5
+    },
+    {
+        "id": 7,
+        "name": "Serial: Печать ЛН (println)",
+        "x": 842,
+        "y": 518,
+        "block_type": "serial_println",
+        "input_value": "b",
+        "input_value2": "Hello",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 8,
+        "child_id": 9
+    },
+    {
+        "id": 8,
+        "name": "Serial: Печать (print)",
+        "x": 842,
+        "y": 466,
+        "block_type": "serial_print",
+        "input_value": "B = ",
+        "input_value2": "Hello",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 5,
+        "child_id": 7
+    },
+    {
+        "id": 9,
+        "name": "Задержка (мс)",
+        "x": 842,
+        "y": 570,
+        "block_type": "delay",
+        "input_value": "200",
+        "input_value2": "500",
+        "color": [
+            128,
+            0,
+            128
+        ],
+        "parent_id": 7,
+        "child_id": null
+    },
+    {
+        "id": 10,
+        "name": "Serial: Инициализация",
+        "x": 400,
+        "y": 102,
+        "block_type": "serial_init",
+        "input_value": "Serial",
+        "input_value2": "9600",
+        "color": [
+            75,
+            0,
+            130
+        ],
+        "parent_id": 0,
+        "child_id": 13
+    },
+    {
+        "id": 11,
+        "name": "Создать int (Целое)",
+        "x": 400,
+        "y": 258,
+        "block_type": "var_int",
+        "input_value": "g",
+        "input_value2": "0",
+        "color": [
+            230,
+            126,
+            34
+        ],
+        "parent_id": 14,
+        "child_id": 12
+    },
+    {
+        "id": 12,
+        "name": "Создать int (Целое)",
+        "x": 400,
+        "y": 310,
+        "block_type": "var_int",
+        "input_value": "b",
+        "input_value2": "0",
+        "color": [
+            230,
+            126,
+            34
+        ],
+        "parent_id": 11,
+        "child_id": null
+    },
+    {
+        "id": 13,
+        "name": "Датчик цвета: Старт",
+        "x": 400,
+        "y": 154,
+        "block_type": "tcs_init",
+        "input_value": "tcs",
+        "input_value2": "tcs",
+        "color": [
+            22,
+            160,
+            133
+        ],
+        "parent_id": 10,
+        "child_id": 14
+    },
+    {
+        "id": 14,
+        "name": "Создать int (Целое)",
+        "x": 400,
+        "y": 206,
+        "block_type": "var_int",
+        "input_value": "r",
+        "input_value2": "0",
+        "color": [
+            230,
+            126,
+            34
+        ],
+        "parent_id": 13,
+        "child_id": 11
+    },
+    {
+        "id": 15,
+        "name": "Датчик цвета: Считать (Цвет|Var)",
+        "x": 842,
+        "y": 102,
+        "block_type": "tcs_read",
+        "input_value": "R",
+        "input_value2": "r",
+        "color": [
+            22,
+            160,
+            133
+        ],
+        "parent_id": 1,
+        "child_id": 16
+    },
+    {
+        "id": 16,
+        "name": "Датчик цвета: Считать (Цвет|Var)",
+        "x": 842,
+        "y": 154,
+        "block_type": "tcs_read",
+        "input_value": "G",
+        "input_value2": "g",
+        "color": [
+            22,
+            160,
+            133
+        ],
+        "parent_id": 15,
+        "child_id": 2
+    }
+]

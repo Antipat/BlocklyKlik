@@ -1,0 +1,130 @@
+[
+    {
+        "id": 0,
+        "name": "НАСТРОЙКА setup()",
+        "x": 400,
+        "y": 50,
+        "block_type": "core_setup",
+        "input_value": "myServo",
+        "input_value2": "0",
+        "color": [
+            44,
+            62,
+            80
+        ],
+        "parent_id": null,
+        "child_id": 2
+    },
+    {
+        "id": 1,
+        "name": "ГЛАВНЫЙ ЦИКЛ loop()",
+        "x": 842,
+        "y": 50,
+        "block_type": "core_loop",
+        "input_value": "myServo",
+        "input_value2": "0",
+        "color": [
+            44,
+            62,
+            80
+        ],
+        "parent_id": null,
+        "child_id": 5
+    },
+    {
+        "id": 2,
+        "name": "Bluetooth: Считать в Var",
+        "x": 400,
+        "y": 102,
+        "block_type": "bluetooth_read",
+        "input_value": "A4",
+        "input_value2": "x",
+        "color": [
+            22,
+            160,
+            133
+        ],
+        "parent_id": 0,
+        "child_id": 3
+    },
+    {
+        "id": 3,
+        "name": "Конец блока / }",
+        "x": 400,
+        "y": 154,
+        "block_type": "end_bracket",
+        "input_value": "",
+        "input_value2": "0",
+        "color": [
+            128,
+            0,
+            128
+        ],
+        "parent_id": 2,
+        "child_id": 4
+    },
+    {
+        "id": 4,
+        "name": "Создать String",
+        "x": 400,
+        "y": 206,
+        "block_type": "var_string",
+        "input_value": "x",
+        "input_value2": " ",
+        "color": [
+            230,
+            126,
+            34
+        ],
+        "parent_id": 3,
+        "child_id": null
+    },
+    {
+        "id": 5,
+        "name": "Bluetooth: Считать в Var",
+        "x": 842,
+        "y": 102,
+        "block_type": "bluetooth_read",
+        "input_value": "A4",
+        "input_value2": "x",
+        "color": [
+            22,
+            160,
+            133
+        ],
+        "parent_id": 1,
+        "child_id": 7
+    },
+    {
+        "id": 6,
+        "name": "Конец блока / }",
+        "x": 842,
+        "y": 206,
+        "block_type": "end_bracket",
+        "input_value": "",
+        "input_value2": "0",
+        "color": [
+            128,
+            0,
+            128
+        ],
+        "parent_id": 7,
+        "child_id": null
+    },
+    {
+        "id": 7,
+        "name": "Комментарий //",
+        "x": 842,
+        "y": 154,
+        "block_type": "cpp_comment",
+        "input_value": "Действия",
+        "input_value2": "Напишите здесь что-то...",
+        "color": [
+            120,
+            125,
+            130
+        ],
+        "parent_id": 5,
+        "child_id": 6
+    }
+]
